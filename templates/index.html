@@ -1,56 +1,264 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Video Clipper</title>
+<meta charset="UTF-8">
+<title>Video Clipper</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f4f6f8; color:#333; margin:0; padding:20px; display:flex; flex-direction:row; gap:30px; }
+#left-panel { flex:1; display:flex; flex-direction:column; align-items:flex-start; }
+button { background:#0078d7; color:white; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; }
+button:hover { background:#005fa3; }
+video { max-width:640px; max-height:360px; width:640px; height:360px; background:black; }
+.timeline-container { position:relative; width:640px; height:20px; background:#ddd; margin-top:20px; border-radius:10px; }
+.marker { position:absolute; top:-5px; width:10px; height:30px; background:#0078d7; border-radius:3px; cursor:pointer; }
+.marker.end { background:#e63946; }
+#progressFillTop { position:absolute; top:0; height:100%; background:#7378ff; width:0%; }
+#scrubHandle { position:absolute; top:-3px; width:8px; height:26px; background:#555; cursor:pointer; border-radius:4px; }
+#rangeOverlayTop { position:absolute; top:0; height:100%; background:rgba(115,120,255,0.2); pointer-events:none; }
+#selectionRange { position:absolute; top:0; height:100%; background:rgba(115,120,255,0.4); }
+.inputs { margin-top:10px; display:flex; gap:10px; align-items:center; }
+#toast { visibility:hidden; min-width:250px; background:#333; color:white; text-align:center; border-radius:6px; padding:10px; position:fixed; z-index:1; right:20px; bottom:30px; font-size:14px; opacity:0; transition:opacity 0.5s,bottom 0.5s; }
+#toast.show { visibility:visible; opacity:1; bottom:50px; }
+</style>
 </head>
 <body>
+<div id="left-panel">
 <h1>Video Clipper</h1>
+<button onclick="abrirVideo()">🎬 Abrir vídeo</button>
+<video id="videoPlayer" controls></video>
 
-<button onclick="abrirVideo()">Abrir vídeo</button><br>
-<video id="videoPlayer" width="640" controls></video>
-
-<div>
-    <label>Inicio: <input type="number" id="start" step="0.1" value="0"></label>
-    <label>Fin: <input type="number" id="end" step="0.1" value="10"></label>
-    <button onclick="generateClip()">Generar Clip</button>
+<!-- TOP timeline: progreso global -->
+<div class="timeline-container" id="timelineTop">
+    <div id="rangeOverlayTop"></div>
+    <div id="progressFillTop"></div>
+    <div id="scrubHandle"></div>
 </div>
 
-<h2>Clip generado:</h2>
-<video id="clipPlayer" width="640" controls></video>
+<!-- BOTTOM timeline: markers -->
+<div class="timeline-container" id="timelineBottom">
+    <div id="selectionRange"></div>
+    <div id="markerStart" class="marker"></div>
+    <div id="markerEnd" class="marker end"></div>
+</div>
+
+<div class="inputs">
+    <label>Inicio: <input id="start" type="text" value="00:00:00"></label>
+    <label>Fin: <input id="end" type="text" value="00:00:00"></label>
+    <button id="generateBtn" onclick="generateClip()">✂️ Generar Clip</button>
+</div>
+</div>
+
+<div id="toast">Clip generado con éxito ✅</div>
 
 <script>
-function abrirVideo() {
-    fetch('/abrir_video', { method: 'GET' })
-    .then(res => res.json())
-    .then(data => {
-        if (data.video_url) {
-            document.getElementById('videoPlayer').src = data.video_url;
-            document.getElementById('videoPlayer').load();
-        } else {
-            alert(data.error);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const formatTime=t=>{if(isNaN(t))return"00:00:00"; const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=Math.floor(t%60); return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;};
+const parseTime=s=>{const parts=s.split(':').map(x=>parseInt(x,10)); if(parts.length===3)return parts[0]*3600+parts[1]*60+parts[2]; if(parts.length===2)return parts[0]*60+parts[1]; return parts[0]||0;};
+
+const video=document.getElementById("videoPlayer");
+const timelineTop=document.getElementById("timelineTop");
+const progressFillTop=document.getElementById("progressFillTop");
+const scrubHandle=document.getElementById("scrubHandle");
+const rangeOverlayTop=document.getElementById("rangeOverlayTop");
+
+const timelineBottom=document.getElementById("timelineBottom");
+const selectionRange=document.getElementById("selectionRange");
+const markerStart=document.getElementById("markerStart");
+const markerEnd=document.getElementById("markerEnd");
+
+const startInput=document.getElementById("start");
+const endInput=document.getElementById("end");
+const toast=document.getElementById("toast");
+const generateBtn=document.getElementById("generateBtn");
+
+let draggingMarker=null;
+let draggingSelection=false;
+let scrubbing=false;
+let wasPlayingBeforeDrag=false;
+const minGap=0.1;
+const clipQueue=[];
+
+video.addEventListener("loadedmetadata",()=>{
+    startInput.dataset.sec=0;
+    endInput.dataset.sec=video.duration;
+    startInput.value=formatTime(0);
+    endInput.value=formatTime(video.duration);
+    updateSelectionVisual();
+    updateProgressVisual();
+    updateRangeOverlayTop();
+});
+
+function updateProgressVisual(){
+    const s = parseFloat(startInput.dataset.sec);
+    const e = parseFloat(endInput.dataset.sec);
+
+    // progreso normalizado al rango start-end
+    const pct = ((video.currentTime - s) / (e - s)) * 100;
+    progressFillTop.style.width = pct + "%";
+
+    // scrubber posición dentro del rango start-end
+    const leftStart = (s / video.duration) * 100;
+    const leftEnd = (e / video.duration) * 100;
+    scrubHandle.style.left = leftStart + pct * (leftEnd - leftStart)/100 + "%";
+}
+
+function updateSelectionVisual(){
+    const s=parseFloat(startInput.dataset.sec);
+    const e=parseFloat(endInput.dataset.sec);
+    const leftStart=(s/video.duration)*100;
+    const leftEnd=(e/video.duration)*100;
+    markerStart.style.left=leftStart+"%";
+    markerEnd.style.left=leftEnd+"%";
+    selectionRange.style.left=leftStart+"%";
+    selectionRange.style.width=(leftEnd-leftStart)+"%";
+    startInput.value=formatTime(s);
+    endInput.value=formatTime(e);
+    updateRangeOverlayTop();
+}
+
+function updateRangeOverlayTop(){
+    const s=parseFloat(startInput.dataset.sec);
+    const e=parseFloat(endInput.dataset.sec);
+    const leftStart=(s/video.duration)*100;
+    const leftEnd=(e/video.duration)*100;
+    rangeOverlayTop.style.left=leftStart+"%";
+    rangeOverlayTop.style.width=(leftEnd-leftStart)+"%";
+}
+
+video.addEventListener("timeupdate",()=>{
+    const s=parseFloat(startInput.dataset.sec);
+    const e=parseFloat(endInput.dataset.sec);
+    if(video.currentTime>=e){
+        video.currentTime=s;
+        video.play();
+    }
+    updateProgressVisual();
+});
+
+timelineTop.addEventListener("pointerdown",event=>{
+    scrubbing=true;
+    wasPlayingBeforeDrag=!video.paused;
+    if(wasPlayingBeforeDrag) video.pause();
+    handleScrub(event);
+});
+document.addEventListener("pointermove",event=>{if(scrubbing) handleScrub(event);});
+document.addEventListener("pointerup",()=>{if(scrubbing){scrubbing=false; if(wasPlayingBeforeDrag) video.play();}});
+
+function handleScrub(event){
+    const rect = timelineTop.getBoundingClientRect();
+    const x = clamp(event.clientX - rect.left, 0, rect.width);
+
+    const s = parseFloat(startInput.dataset.sec);
+    const e = parseFloat(endInput.dataset.sec);
+
+    // porcentaje relativo a todo el timeline
+    const pct = x / rect.width;
+    const newTime = s + pct * (e - s);
+
+    // limitar entre start y end
+    video.currentTime = clamp(newTime, s, e);
+    updateProgressVisual();
+}
+
+// markers
+markerStart.addEventListener("pointerdown",()=>{draggingMarker="start";});
+markerEnd.addEventListener("pointerdown",()=>{draggingMarker="end";});
+selectionRange.addEventListener("pointerdown",()=>{draggingSelection=true;});
+
+document.addEventListener("pointermove",event=>{
+    if(!draggingMarker && !draggingSelection) return;
+    const rect=timelineBottom.getBoundingClientRect();
+    const x=clamp(event.clientX-rect.left,0,rect.width);
+    const pct=(x/rect.width)*100;
+    const s=parseFloat(startInput.dataset.sec);
+    const e=parseFloat(endInput.dataset.sec);
+    const gapPct=(minGap/video.duration)*100;
+
+    if(draggingMarker==="start"){
+        const maxStart=parseFloat(markerEnd.style.left)-gapPct;
+        markerStart.style.left=clamp(pct,0,maxStart)+"%";
+        startInput.dataset.sec=parseFloat(markerStart.style.left)/100*video.duration;
+    } else if(draggingMarker==="end"){
+        const minEnd=parseFloat(markerStart.style.left)+gapPct;
+        markerEnd.style.left=clamp(pct,minEnd,100)+"%";
+        endInput.dataset.sec=parseFloat(markerEnd.style.left)/100*video.duration;
+    } else if(draggingSelection){
+        const width=parseFloat(markerEnd.style.left)-parseFloat(markerStart.style.left);
+        let newLeft=clamp(pct-width/2,0,100-width);
+        markerStart.style.left=newLeft+"%";
+        markerEnd.style.left=(newLeft+width)+"%";
+        startInput.dataset.sec=parseFloat(markerStart.style.left)/100*video.duration;
+        endInput.dataset.sec=parseFloat(markerEnd.style.left)/100*video.duration;
+    }
+    updateSelectionVisual();
+});
+
+document.addEventListener("pointerup",()=>{
+    if(draggingMarker==="start") video.currentTime=parseFloat(startInput.dataset.sec);
+    else if(draggingMarker==="end") video.currentTime=Math.max(parseFloat(endInput.dataset.sec)-3,parseFloat(startInput.dataset.sec));
+    draggingMarker=null;
+    draggingSelection=false;
+});
+
+startInput.addEventListener("change",()=>{
+    const t=clamp(parseTime(startInput.value),0,parseFloat(endInput.dataset.sec)-minGap);
+    startInput.dataset.sec=t;
+    updateSelectionVisual();
+    video.currentTime=t;
+});
+endInput.addEventListener("change",()=>{
+    const t=clamp(parseTime(endInput.value),parseFloat(startInput.dataset.sec)+minGap,video.duration);
+    endInput.dataset.sec=t;
+    updateSelectionVisual();
+    video.currentTime=Math.max(t-3,parseFloat(startInput.dataset.sec));
+});
+
+// backend
+function abrirVideo(){
+    fetch("/abrir_video",{method:"GET"})
+    .then(r=>r.json())
+    .then(d=>{
+        if(d.error) alert(d.error);
+        else {
+            video.src=d.video_url || "/video?t="+new Date().getTime();
+            video.load();
         }
     });
 }
 
-function generateClip() {
-    const start = parseFloat(document.getElementById('start').value);
-    const end = parseFloat(document.getElementById('end').value);
+function generateClip(){
+    const start=parseFloat(startInput.dataset.sec);
+    const end=parseFloat(endInput.dataset.sec);
+    clipQueue.push({start,end});
+    showToast(`Generando clip... ${clipQueue.length} en cola`);
+    processQueue();
+}
 
-    fetch('/generate_clip', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({start, end})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.clip_url) {
-            document.getElementById('clipPlayer').src = data.clip_url;
-            document.getElementById('clipPlayer').load();
-        } else {
-            alert(data.error);
-        }
-    });
+let processingQueue=false;
+async function processQueue(){
+    if(processingQueue || clipQueue.length===0) return;
+    processingQueue=true;
+    while(clipQueue.length>0){
+        const clip=clipQueue.shift();
+        generateBtn.textContent="Generando... ⏳";
+        await fetch("/generate_clip",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(clip)
+        }).then(r=>r.json())
+        .then(d=>{
+            if(d.clip_url) showToast(`Clip generado con éxito (${clipQueue.length+1} restantes: ${clipQueue.length})`);
+            else alert(d.error||"Error al generar clip");
+        });
+        generateBtn.textContent="✂️ Generar Clip";
+    }
+    processingQueue=false;
+}
+
+function showToast(msg){
+    toast.textContent=msg;
+    toast.classList.add("show");
+    setTimeout(()=>toast.classList.remove("show"),3000);
 }
 </script>
 </body>

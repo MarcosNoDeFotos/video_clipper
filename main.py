@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, make_response
 from moviepy.video.io.VideoFileClip import VideoFileClip as VFC
 import os
 from multiprocessing import Process, Queue
 from tkinter import Tk, filedialog
+import time
 
 app = Flask(__name__)
 app.config['CLIPS_FOLDER'] = 'static/clips'
@@ -10,18 +11,29 @@ os.makedirs(app.config['CLIPS_FOLDER'], exist_ok=True)
 
 videoPath = None  # ruta local del vídeo
 
-# Función que se ejecuta en un proceso separado para abrir Tkinter
+
+# === 🔧 DESACTIVAR CACHÉ GLOBALMENTE ===
+@app.after_request
+def add_no_cache_headers(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+# === 🎬 Selección de vídeo con Tkinter ===
 def seleccionar_video(queue):
     root = Tk()
     root.withdraw()
     filename = filedialog.askopenfilename(
         title="Selecciona un vídeo",
-        filetypes=[("Video files", "*.mp4 *.mov *.avi")]
+        filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv *.flv *.wmv")]
     )
     root.destroy()
     queue.put(filename)
 
-# Endpoint para abrir vídeo dinámicamente
+
+# === 📂 Endpoint para abrir vídeo dinámicamente ===
 @app.route('/abrir_video', methods=['GET'])
 def abrir_video():
     global videoPath
@@ -30,21 +42,30 @@ def abrir_video():
     p.start()
     p.join()
     selected_path = queue.get()
+
     if not selected_path:
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
-    videoPath = selected_path
-    # Se devuelve la URL que usará el navegador
-    return jsonify({"video_url": "/video"})
 
-# Endpoint para que el navegador pueda reproducir el vídeo
+    videoPath = selected_path
+    # Se devuelve la URL que usará el navegador (forzando recarga con timestamp)
+    return jsonify({"video_url": f"/video?ts={int(time.time())}"})
+
+
+# === 🎥 Endpoint para servir el vídeo seleccionado ===
 @app.route('/video')
 def video_file():
     global videoPath
     if not videoPath:
         return "No hay vídeo seleccionado", 404
-    return send_file(videoPath)
 
-# Endpoint para generar clips con MoviePy
+    response = make_response(send_file(videoPath))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+# === ✂️ Endpoint para generar clips ===
 @app.route('/generate_clip', methods=['POST'])
 def generate_clip():
     global videoPath
@@ -68,17 +89,27 @@ def generate_clip():
             i += 1
         clip_path = os.path.join(app.config['CLIPS_FOLDER'], clip_filename)
 
-        # Usar with para cerrar automáticamente
-        with VFC(videoPath).subclipped(start, end) as clip:
-            clip.write_videofile(clip_path, codec="libx264")
+        # Crear clip temporal sin cargar todo el vídeo a memoria
+        with VFC(videoPath) as video:
+            subclip = video.subclipped(start, end)
+            subclip.write_videofile(clip_path, codec="libx264")
 
-        return jsonify({"clip_url": f"/static/clips/{clip_filename}"})
+        # Agregar parámetro temporal para evitar caché
+        version = int(time.time())
+        return jsonify({"clip_url": f"/static/clips/{clip_filename}?v={version}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# === 🏠 Página principal ===
 @app.route('/')
 def index():
-    return render_template('index.html')
+    response = make_response(render_template('index.html'))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
