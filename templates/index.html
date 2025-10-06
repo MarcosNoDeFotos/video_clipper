@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Clipper</title>
+</head>
+<body>
+<h1>Video Clipper</h1>
+
+<button onclick="abrirVideo()">Abrir vídeo</button><br>
+<video id="videoPlayer" width="640" controls></video>
+
+<div>
+    <label>Inicio: <input type="number" id="start" step="0.1" value="0"></label>
+    <label>Fin: <input type="number" id="end" step="0.1" value="10"></label>
+    <button onclick="generateClip()">Generar Clip</button>
+</div>
+
+<h2>Clip generado:</h2>
+<video id="clipPlayer" width="640" controls></video>
+
+<script>
+function abrirVideo() {
+    fetch('/abrir_video', { method: 'GET' })
+    .then(res => res.json())
+    .then(data => {
+        if (data.video_url) {
+            document.getElementById('videoPlayer').src = data.video_url;
+            document.getElementById('videoPlayer').load();
+        } else {
+            alert(data.error);
+        }
+    });
+}
+
+function generateClip() {
+    const start = parseFloat(document.getElementById('start').value);
+    const end = parseFloat(document.getElementById('end').value);
+
+    fetch('/generate_clip', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({start, end})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.clip_url) {
+            document.getElementById('clipPlayer').src = data.clip_url;
+            document.getElementById('clipPlayer').load();
+        } else {
+            alert(data.error);
+        }
+    });
+}
+</script>
+</body>
+</html>
