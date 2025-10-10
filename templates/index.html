@@ -1,265 +1,483 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<title>Video Clipper</title>
-<style>
-body { font-family: Arial, sans-serif; background:#f4f6f8; color:#333; margin:0; padding:20px; display:flex; flex-direction:row; gap:30px; }
-#left-panel { flex:1; display:flex; flex-direction:column; align-items:flex-start; }
-button { background:#0078d7; color:white; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; }
-button:hover { background:#005fa3; }
-video { max-width:640px; max-height:360px; width:640px; height:360px; background:black; }
-.timeline-container { position:relative; width:640px; height:20px; background:#ddd; margin-top:20px; border-radius:10px; }
-.marker { position:absolute; top:-5px; width:10px; height:30px; background:#0078d7; border-radius:3px; cursor:pointer; }
-.marker.end { background:#e63946; }
-#progressFillTop { position:absolute; top:0; height:100%; background:#7378ff; width:0%; }
-#scrubHandle { position:absolute; top:-3px; width:8px; height:26px; background:#555; cursor:pointer; border-radius:4px; }
-#rangeOverlayTop { position:absolute; top:0; height:100%; background:rgba(115,120,255,0.2); pointer-events:none; }
-#selectionRange { position:absolute; top:0; height:100%; background:rgba(115,120,255,0.4); }
-.inputs { margin-top:10px; display:flex; gap:10px; align-items:center; }
-#toast { visibility:hidden; min-width:250px; background:#333; color:white; text-align:center; border-radius:6px; padding:10px; position:fixed; z-index:1; right:20px; bottom:30px; font-size:14px; opacity:0; transition:opacity 0.5s,bottom 0.5s; }
-#toast.show { visibility:visible; opacity:1; bottom:50px; }
-</style>
-</head>
-<body>
-<div id="left-panel">
-<h1>Video Clipper</h1>
-<button onclick="abrirVideo()">🎬 Abrir vídeo</button>
-<video id="videoPlayer" controls></video>
-
-<!-- TOP timeline: progreso global -->
-<div class="timeline-container" id="timelineTop">
-    <div id="rangeOverlayTop"></div>
-    <div id="progressFillTop"></div>
-    <div id="scrubHandle"></div>
-</div>
-
-<!-- BOTTOM timeline: markers -->
-<div class="timeline-container" id="timelineBottom">
-    <div id="selectionRange"></div>
-    <div id="markerStart" class="marker"></div>
-    <div id="markerEnd" class="marker end"></div>
-</div>
-
-<div class="inputs">
-    <label>Inicio: <input id="start" type="text" value="00:00:00"></label>
-    <label>Fin: <input id="end" type="text" value="00:00:00"></label>
-    <button id="generateBtn" onclick="generateClip()">✂️ Generar Clip</button>
-</div>
-</div>
-
-<div id="toast">Clip generado con éxito ✅</div>
-
-<script>
-const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
-const formatTime=t=>{if(isNaN(t))return"00:00:00"; const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=Math.floor(t%60); return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;};
-const parseTime=s=>{const parts=s.split(':').map(x=>parseInt(x,10)); if(parts.length===3)return parts[0]*3600+parts[1]*60+parts[2]; if(parts.length===2)return parts[0]*60+parts[1]; return parts[0]||0;};
-
-const video=document.getElementById("videoPlayer");
-const timelineTop=document.getElementById("timelineTop");
-const progressFillTop=document.getElementById("progressFillTop");
-const scrubHandle=document.getElementById("scrubHandle");
-const rangeOverlayTop=document.getElementById("rangeOverlayTop");
-
-const timelineBottom=document.getElementById("timelineBottom");
-const selectionRange=document.getElementById("selectionRange");
-const markerStart=document.getElementById("markerStart");
-const markerEnd=document.getElementById("markerEnd");
-
-const startInput=document.getElementById("start");
-const endInput=document.getElementById("end");
-const toast=document.getElementById("toast");
-const generateBtn=document.getElementById("generateBtn");
-
-let draggingMarker=null;
-let draggingSelection=false;
-let scrubbing=false;
-let wasPlayingBeforeDrag=false;
-const minGap=0.1;
-const clipQueue=[];
-
-video.addEventListener("loadedmetadata",()=>{
-    startInput.dataset.sec=0;
-    endInput.dataset.sec=video.duration;
-    startInput.value=formatTime(0);
-    endInput.value=formatTime(video.duration);
-    updateSelectionVisual();
-    updateProgressVisual();
-    updateRangeOverlayTop();
-});
-
-function updateProgressVisual(){
-    const s = parseFloat(startInput.dataset.sec);
-    const e = parseFloat(endInput.dataset.sec);
-
-    // progreso normalizado al rango start-end
-    const pct = ((video.currentTime - s) / (e - s)) * 100;
-    progressFillTop.style.width = pct + "%";
-
-    // scrubber posición dentro del rango start-end
-    const leftStart = (s / video.duration) * 100;
-    const leftEnd = (e / video.duration) * 100;
-    scrubHandle.style.left = leftStart + pct * (leftEnd - leftStart)/100 + "%";
-}
-
-function updateSelectionVisual(){
-    const s=parseFloat(startInput.dataset.sec);
-    const e=parseFloat(endInput.dataset.sec);
-    const leftStart=(s/video.duration)*100;
-    const leftEnd=(e/video.duration)*100;
-    markerStart.style.left=leftStart+"%";
-    markerEnd.style.left=leftEnd+"%";
-    selectionRange.style.left=leftStart+"%";
-    selectionRange.style.width=(leftEnd-leftStart)+"%";
-    startInput.value=formatTime(s);
-    endInput.value=formatTime(e);
-    updateRangeOverlayTop();
-}
-
-function updateRangeOverlayTop(){
-    const s=parseFloat(startInput.dataset.sec);
-    const e=parseFloat(endInput.dataset.sec);
-    const leftStart=(s/video.duration)*100;
-    const leftEnd=(e/video.duration)*100;
-    rangeOverlayTop.style.left=leftStart+"%";
-    rangeOverlayTop.style.width=(leftEnd-leftStart)+"%";
-}
-
-video.addEventListener("timeupdate",()=>{
-    const s=parseFloat(startInput.dataset.sec);
-    const e=parseFloat(endInput.dataset.sec);
-    if(video.currentTime>=e){
-        video.currentTime=s;
-        video.play();
-    }
-    updateProgressVisual();
-});
-
-timelineTop.addEventListener("pointerdown",event=>{
-    scrubbing=true;
-    wasPlayingBeforeDrag=!video.paused;
-    if(wasPlayingBeforeDrag) video.pause();
-    handleScrub(event);
-});
-document.addEventListener("pointermove",event=>{if(scrubbing) handleScrub(event);});
-document.addEventListener("pointerup",()=>{if(scrubbing){scrubbing=false; if(wasPlayingBeforeDrag) video.play();}});
-
-function handleScrub(event){
-    const rect = timelineTop.getBoundingClientRect();
-    const x = clamp(event.clientX - rect.left, 0, rect.width);
-
-    const s = parseFloat(startInput.dataset.sec);
-    const e = parseFloat(endInput.dataset.sec);
-
-    // porcentaje relativo a todo el timeline
-    const pct = x / rect.width;
-    const newTime = s + pct * (e - s);
-
-    // limitar entre start y end
-    video.currentTime = clamp(newTime, s, e);
-    updateProgressVisual();
-}
-
-// markers
-markerStart.addEventListener("pointerdown",()=>{draggingMarker="start";});
-markerEnd.addEventListener("pointerdown",()=>{draggingMarker="end";});
-selectionRange.addEventListener("pointerdown",()=>{draggingSelection=true;});
-
-document.addEventListener("pointermove",event=>{
-    if(!draggingMarker && !draggingSelection) return;
-    const rect=timelineBottom.getBoundingClientRect();
-    const x=clamp(event.clientX-rect.left,0,rect.width);
-    const pct=(x/rect.width)*100;
-    const s=parseFloat(startInput.dataset.sec);
-    const e=parseFloat(endInput.dataset.sec);
-    const gapPct=(minGap/video.duration)*100;
-
-    if(draggingMarker==="start"){
-        const maxStart=parseFloat(markerEnd.style.left)-gapPct;
-        markerStart.style.left=clamp(pct,0,maxStart)+"%";
-        startInput.dataset.sec=parseFloat(markerStart.style.left)/100*video.duration;
-    } else if(draggingMarker==="end"){
-        const minEnd=parseFloat(markerStart.style.left)+gapPct;
-        markerEnd.style.left=clamp(pct,minEnd,100)+"%";
-        endInput.dataset.sec=parseFloat(markerEnd.style.left)/100*video.duration;
-    } else if(draggingSelection){
-        const width=parseFloat(markerEnd.style.left)-parseFloat(markerStart.style.left);
-        let newLeft=clamp(pct-width/2,0,100-width);
-        markerStart.style.left=newLeft+"%";
-        markerEnd.style.left=(newLeft+width)+"%";
-        startInput.dataset.sec=parseFloat(markerStart.style.left)/100*video.duration;
-        endInput.dataset.sec=parseFloat(markerEnd.style.left)/100*video.duration;
-    }
-    updateSelectionVisual();
-});
-
-document.addEventListener("pointerup",()=>{
-    if(draggingMarker==="start") video.currentTime=parseFloat(startInput.dataset.sec);
-    else if(draggingMarker==="end") video.currentTime=Math.max(parseFloat(endInput.dataset.sec)-3,parseFloat(startInput.dataset.sec));
-    draggingMarker=null;
-    draggingSelection=false;
-});
-
-startInput.addEventListener("change",()=>{
-    const t=clamp(parseTime(startInput.value),0,parseFloat(endInput.dataset.sec)-minGap);
-    startInput.dataset.sec=t;
-    updateSelectionVisual();
-    video.currentTime=t;
-});
-endInput.addEventListener("change",()=>{
-    const t=clamp(parseTime(endInput.value),parseFloat(startInput.dataset.sec)+minGap,video.duration);
-    endInput.dataset.sec=t;
-    updateSelectionVisual();
-    video.currentTime=Math.max(t-3,parseFloat(startInput.dataset.sec));
-});
-
-// backend
-function abrirVideo(){
-    fetch("/abrir_video",{method:"GET"})
-    .then(r=>r.json())
-    .then(d=>{
-        if(d.error) alert(d.error);
-        else {
-            video.src=d.video_url || "/video?t="+new Date().getTime();
-            video.load();
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor de vídeo</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f2f2f2;
+            margin: 20px;
+            user-select: none;
         }
-    });
-}
 
-function generateClip(){
-    const start=parseFloat(startInput.dataset.sec);
-    const end=parseFloat(endInput.dataset.sec);
-    clipQueue.push({start,end});
-    showToast(`Generando clip... ${clipQueue.length} en cola`);
-    processQueue();
-}
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
 
-let processingQueue=false;
-async function processQueue(){
-    if(processingQueue || clipQueue.length===0) return;
-    processingQueue=true;
-    while(clipQueue.length>0){
-        const clip=clipQueue.shift();
-        generateBtn.textContent="Generando... ⏳";
-        await fetch("/generate_clip",{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify(clip)
-        }).then(r=>r.json())
-        .then(d=>{
-            if(d.clip_url) showToast(`Clip generado con éxito (${clipQueue.length+1} restantes: ${clipQueue.length})`);
-            else alert(d.error||"Error al generar clip");
+        video {
+            width: 640px;
+            border-radius: 8px;
+        }
+
+        .timeline-container {
+            position: relative;
+            width: 640px;
+            height: 10px;
+            background: #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .progress-fill-top {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background: #7378ff;
+            border-radius: 5px;
+        }
+
+        .scrub-handle {
+            position: absolute;
+            top: -4px;
+            width: 12px;
+            height: 18px;
+            background: #2a2aff;
+            border-radius: 4px;
+            transform: translateX(-50%);
+            cursor: pointer;
+        }
+
+        .timeline-bottom {
+            position: relative;
+            width: 640px;
+            height: 14px;
+            background: #ccc;
+            border-radius: 7px;
+            margin-top: 12px;
+        }
+
+        .marker {
+            position: absolute;
+            top: -3px;
+            width: 8px;
+            height: 20px;
+            border-radius: 3px;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+        }
+
+        #markerStart {
+            background: #0078d7;
+        }
+
+        /* azul */
+        #markerEnd {
+            background: #e63946;
+        }
+
+        /* rojo */
+        .selection-range {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(115, 120, 255, 0.4);
+            border-radius: 5px;
+        }
+
+        input {
+            width: 100px;
+            text-align: center;
+        }
+
+        input+button {
+            /* margin-left: 2px;
+    margin-right: 6px; */
+            cursor: pointer;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .noselect {
+            user-select: none;
+        }
+
+        .btnContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .btnContainer div {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <button id="openVideo">Abrir vídeo</button>
+        <video id="videoPlayer" controls></video>
+
+        <!-- Timeline superior (scrub dentro del rango) -->
+        <div class="timeline-container" id="timelineTop">
+            <div class="progress-fill-top" id="progressFillTop"></div>
+            <div class="scrub-handle" id="scrubHandle"></div>
+        </div>
+
+        <!-- Timeline inferior con markers -->
+        <div class="timeline-bottom" id="timelineBottom">
+            <div class="selection-range" id="selectionRange"></div>
+            <div class="marker" id="markerStart"></div>
+            <div class="marker" id="markerEnd"></div>
+        </div>
+
+        <div class="btnContainer">
+            <div>
+                Inicio:
+                <input id="start" type="text" readonly>
+                <button id="startDec" title="Restar 1s">⬅️</button>
+                <button id="startInc" title="Sumar 1s">➡️</button>
+            </div>
+            <div>
+                Fin:
+                <input id="end" type="text" readonly>
+                <button id="endDec" title="Restar 1s">⬅️</button>
+                <button id="endInc" title="Sumar 1s">➡️</button>
+            </div>
+            <div>
+                <!-- Nuevos botones para mover el segmento -->
+                <button id="segmentDec" title="Mover segmento 1s atrás">⬅️</button>
+                <button id="segmentInc" title="Mover segmento 1s adelante">➡️</button>
+            </div>
+            <button id="generateClip">Generar clip</button>
+        </div>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const video = document.getElementById("videoPlayer");
+        const openBtn = document.getElementById("openVideo");
+        const timelineTop = document.getElementById("timelineTop");
+        const timelineBottom = document.getElementById("timelineBottom");
+        const scrubHandle = document.getElementById("scrubHandle");
+        const progressFillTop = document.getElementById("progressFillTop");
+        const markerStart = document.getElementById("markerStart");
+        const markerEnd = document.getElementById("markerEnd");
+        const selectionRange = document.getElementById("selectionRange");
+        const startInput = document.getElementById("start");
+        const endInput = document.getElementById("end");
+        const toast = document.getElementById("toast");
+        const generateClipBtn = document.getElementById("generateClip");
+        const startDecBtn = document.getElementById("startDec");
+        const startIncBtn = document.getElementById("startInc");
+        const endDecBtn = document.getElementById("endDec");
+        const endIncBtn = document.getElementById("endInc");
+
+        let videoDuration = 0;
+        let markerStartPct = 0;
+        let markerEndPct = 100;
+        let scrubbing = false;
+        let draggingMarker = null;
+        let draggingRange = false;
+        let dragOffset = 0;
+        let wasPlayingBeforeDrag = false;
+        let clipQueue = [];
+        let processingClip = false;
+
+        function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00:00";
+            const h = Math.floor(sec / 3600).toString().padStart(2, "0");
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
+            const s = Math.floor(sec % 60).toString().padStart(2, "0");
+            return `${h}:${m}:${s}`;
+        }
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 2000);
+        }
+
+        openBtn.onclick = async () => {
+            const res = await fetch("/abrir_video");
+            const data = await res.json();
+            if (data.video_url) {
+                video.src = data.video_url + "?t=" + new Date().getTime();
+                video.load();
+            }
+        };
+
+        video.onloadedmetadata = () => {
+            videoDuration = video.duration;
+            updateMarkers();
+        };
+
+        video.ontimeupdate = () => {
+            if (!videoDuration) return;
+            const current = video.currentTime;
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((current - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+            scrubHandle.style.left = normPct + "%";
+
+            if (current >= endTime) {
+                video.currentTime = startTime;
+                video.play();
+            }
+        };
+
+        function updateMarkers() {
+            markerStart.style.left = markerStartPct + "%";
+            markerEnd.style.left = markerEndPct + "%";
+            selectionRange.style.left = markerStartPct + "%";
+            selectionRange.style.width = (markerEndPct - markerStartPct) + "%";
+            const sSec = (markerStartPct / 100) * videoDuration;
+            const eSec = (markerEndPct / 100) * videoDuration;
+            startInput.value = formatTime(sSec);
+            endInput.value = formatTime(eSec);
+            startInput.dataset.sec = sSec;
+            endInput.dataset.sec = eSec;
+        }
+
+        // ==== Botones de ajuste 1s ====
+        startDecBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            s = clamp(s - 1, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            startInput.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+        startIncBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            s = clamp(s + 1, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            startInput.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+        endDecBtn.onclick = () => {
+            let e = parseFloat(endInput.dataset.sec);
+            e = clamp(e - 1, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            endInput.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(startInput.dataset.sec);
+            video.currentTime = Math.max(e - 3, s);
+            video.play();
+        };
+        endIncBtn.onclick = () => {
+            let e = parseFloat(endInput.dataset.sec);
+            e = clamp(e + 1, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            endInput.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(startInput.dataset.sec);
+            video.currentTime = Math.max(e - 3, s);
+            video.play();
+        };
+
+        // ==== Scrubbing timeline superior ====
+        timelineTop.addEventListener("pointerdown", ev => {
+            scrubbing = true;
+            wasPlayingBeforeDrag = !video.paused;
+            if (wasPlayingBeforeDrag) video.pause();
+            timelineTop.setPointerCapture(ev.pointerId);
+            handleScrub(ev);
         });
-        generateBtn.textContent="✂️ Generar Clip";
-    }
-    processingQueue=false;
-}
+        timelineTop.addEventListener("pointermove", ev => {
+            if (scrubbing) handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointerup", ev => {
+            if (scrubbing) {
+                scrubbing = false;
+                timelineTop.releasePointerCapture(ev.pointerId);
+                video.play();
+            }
+        });
+        function handleScrub(ev) {
+            const rect = timelineTop.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const clamped = clamp(pct, markerStartPct, markerEndPct);
+            const newTime = (clamped / 100) * videoDuration;
+            video.currentTime = newTime;
 
-function showToast(msg){
-    toast.textContent=msg;
-    toast.classList.add("show");
-    setTimeout(()=>toast.classList.remove("show"),3000);
-}
-</script>
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((newTime - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            scrubHandle.style.left = normPct + "%";
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+        }
+
+        // ==== Markers ====
+        markerStart.addEventListener("pointerdown", ev => {
+            draggingMarker = "start";
+            document.body.classList.add("noselect");
+            markerStart.setPointerCapture(ev.pointerId);
+        });
+        markerEnd.addEventListener("pointerdown", ev => {
+            draggingMarker = "end";
+            document.body.classList.add("noselect");
+            markerEnd.setPointerCapture(ev.pointerId);
+        });
+        markerStart.addEventListener("pointermove", ev => handleMarkerDrag(ev, "start"));
+        markerEnd.addEventListener("pointermove", ev => handleMarkerDrag(ev, "end"));
+        markerStart.addEventListener("pointerup", ev => handleMarkerRelease(ev, "start"));
+        markerEnd.addEventListener("pointerup", ev => handleMarkerRelease(ev, "end"));
+
+        function handleMarkerDrag(ev, which) {
+            if (draggingMarker !== which) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const gap = 0.1;
+            if (which === "start") {
+                markerStartPct = clamp(pct, 0, markerEndPct - gap);
+            } else {
+                markerEndPct = clamp(pct, markerStartPct + gap, 100);
+            }
+            updateMarkers();
+        }
+        function handleMarkerRelease(ev, which) {
+            if (draggingMarker !== which) return;
+            ev.target.releasePointerCapture(ev.pointerId);
+            document.body.classList.remove("noselect");
+            if (which === "start") {
+                video.currentTime = parseFloat(startInput.dataset.sec);
+                video.play();
+            } else {
+                const s = parseFloat(startInput.dataset.sec);
+                const e = parseFloat(endInput.dataset.sec);
+                video.currentTime = Math.max(e - 3, s);
+                video.play();
+            }
+            draggingMarker = null;
+        }
+
+        const segmentDecBtn = document.getElementById("segmentDec");
+        const segmentIncBtn = document.getElementById("segmentInc");
+
+        // Mover segmento 1s atrás
+        segmentDecBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            let e = parseFloat(endInput.dataset.sec);
+            const duration = e - s;
+            // Calcula nuevo inicio, sin salirse de 0
+            s = clamp(s - 1, 0, videoDuration - duration);
+            e = s + duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+
+        // Mover segmento 1s adelante
+        segmentIncBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            let e = parseFloat(endInput.dataset.sec);
+            const duration = e - s;
+            // Calcula nuevo final, sin salirse de videoDuration
+            e = clamp(e + 1, duration, videoDuration);
+            s = e - duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+
+
+        // ==== Rango selection ====
+        selectionRange.addEventListener("pointerdown", ev => {
+            draggingRange = true;
+            document.body.classList.add("noselect");
+            selectionRange.setPointerCapture(ev.pointerId);
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            dragOffset = x - (markerStartPct / 100) * rect.width;
+        });
+        selectionRange.addEventListener("pointermove", ev => {
+            if (!draggingRange) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left - dragOffset, 0, rect.width);
+            const rangeWidth = ((markerEndPct - markerStartPct) / 100) * rect.width;
+            let newStart = (x / rect.width) * 100;
+            let newEnd = ((x + rangeWidth) / rect.width) * 100;
+            const shift = newEnd > 100 ? newEnd - 100 : newStart < 0 ? newStart : 0;
+            markerStartPct = clamp(newStart - shift, 0, 100);
+            markerEndPct = clamp(newEnd - shift, 0, 100);
+            updateMarkers();
+        });
+        selectionRange.addEventListener("pointerup", ev => {
+            if (!draggingRange) return;
+            selectionRange.releasePointerCapture(ev.pointerId);
+            draggingRange = false;
+            document.body.classList.remove("noselect");
+            video.currentTime = parseFloat(startInput.dataset.sec);
+            video.play();
+        });
+
+        // ==== Generar clips ====
+        generateClipBtn.onclick = async () => {
+            const start = parseFloat(startInput.dataset.sec);
+            const end = parseFloat(endInput.dataset.sec);
+            clipQueue.push({ start, end });
+            showToast("Clip añadido a la cola");
+            if (!processingClip) processQueue();
+        };
+        async function processQueue() {
+            if (clipQueue.length === 0) return;
+            processingClip = true;
+            const { start, end } = clipQueue[0];
+            try {
+                const res = await fetch("/generate_clip", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ start, end })
+                });
+                const data = await res.json();
+                if (data.clip_url) {
+                    const done = clipQueue.length;
+                    showToast(`Clip generado con éxito (${done}/${done})`);
+                }
+            } catch (err) {
+                showToast("Error generando clip");
+            }
+            clipQueue.shift();
+            if (clipQueue.length > 0) processQueue();
+            else processingClip = false;
+        }
+    </script>
+
 </body>
+
 </html>
