@@ -102,11 +102,13 @@ def generate_clip():
             "-i", videoPath,
             "-ss", str(start),
             "-to", str(end),
+            "-map", "0",
             "-c", "copy",  # copia directa sin recodificar
             clip_path
         ]
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
+        print(f"👌 Vídeo generado en {clip_path}")
 
         # Agregar parámetro temporal para evitar caché
         version = int(time.time())
