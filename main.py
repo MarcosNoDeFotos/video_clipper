@@ -4,6 +4,7 @@ import os
 from multiprocessing import Process, Queue
 from tkinter import Tk, filedialog
 import time
+import subprocess
 
 app = Flask(__name__)
 app.config['CLIPS_FOLDER'] = 'static/clips'
@@ -90,9 +91,22 @@ def generate_clip():
         clip_path = os.path.join(app.config['CLIPS_FOLDER'], clip_filename)
 
         # Crear clip temporal sin cargar todo el vídeo a memoria
-        with VFC(videoPath) as video:
-            subclip = video.subclipped(start, end)
-            subclip.write_videofile(clip_path, codec="libx264")
+        # with VFC(videoPath) as video:
+        #     subclip = video.subclipped(start, end)
+        #     subclip.write_videofile(clip_path, codec="libx264")
+            
+        # Extraer el clip con FFmpeg conservando TODAS las pistas de audio y video
+        cmd = [
+            "ffmpeg",
+            "-y",  # sobrescribir sin preguntar
+            "-i", videoPath,
+            "-ss", str(start),
+            "-to", str(end),
+            "-c", "copy",  # copia directa sin recodificar
+            clip_path
+        ]
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
 
         # Agregar parámetro temporal para evitar caché
         version = int(time.time())
