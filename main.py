@@ -97,13 +97,16 @@ def generate_clip():
             
         # Extraer el clip con FFmpeg conservando TODAS las pistas de audio y video
         cmd = [
-            "ffmpeg",
-            "-y",  # sobrescribir sin preguntar
-            "-i", videoPath,
+           "ffmpeg",
             "-ss", str(start),
             "-to", str(end),
-            "-map", "0",
-            "-c", "copy",  # copia directa sin recodificar
+            "-i", videoPath,
+            "-map", "0", # Copia todas las pistas de vídeo y audio
+            "-c", "copy", # Copia sin recodificar ni cambiar la calidad
+            "-avoid_negative_ts", "1", # corrige timestamps negativos
+            "-fflags", "+genpts", # recalcula los PTS (Presentation Timestamps) del vídeo
+            "-reset_timestamps", "1", # fuerza que todos los streams comiencen en 0
+            "-y",  # sobrescribir
             clip_path
         ]
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -128,4 +131,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True, use_reloader=False, host="192.168.1.188")
