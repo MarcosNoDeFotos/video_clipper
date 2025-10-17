@@ -132,4 +132,5 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host="192.168.1.188")
+    # app.run(debug=True, use_reloader=False, host="192.168.1.189")
+    app.run(debug=True, use_reloader=False)
