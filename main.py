@@ -8,6 +8,7 @@ import subprocess
 
 app = Flask(__name__)
 app.config['CLIPS_FOLDER'] = 'static/clips'
+# app.config['CLIPS_FOLDER'] = 'G:/videos/Clips generados'
 os.makedirs(app.config['CLIPS_FOLDER'], exist_ok=True)
 
 videoPath = None  # ruta local del vídeo
