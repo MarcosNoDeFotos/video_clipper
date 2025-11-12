@@ -5,3 +5,5 @@
 venv/
 *.lnk
 *.sfk*
+serverConfig.json
+test.py

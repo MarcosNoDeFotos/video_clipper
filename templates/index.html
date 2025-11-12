@@ -2,18 +2,236 @@
 <html lang="es">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Editor de vídeo</title>
+    <meta charset="UTF-8">
+    <title>Anotador de segmentos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: sans-serif;
-            background: #f2f2f2;
-            margin: 20px;
-            user-select: none;
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --input-bg: #2a2a2a;
+            --border-color: #333;
+            --accent: #4CAF50;
         }
 
-        .container {
+        body.light {
+            --bg-color: #fafafa;
+            --text-color: #222;
+            --card-bg: #fff;
+            --input-bg: #f1f1f1;
+            --border-color: #ccc;
+            --accent: #4CAF50;
+        }
+
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            bottom: 15px;
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .segment {
+            margin-bottom: 25px;
+            display: flex;
+            align-items: flex-start;
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        #anotacionText {
+            width: 400px;
+        }
+
+        video {
+            max-width: 320px;
+            margin-right: 20px;
+            border-radius: 6px;
+        }
+
+        .segment-info {
+            flex: 1;
+        }
+
+        .tag-container {
+            display: block;
+            margin-top: 10px;
+        }
+
+        .segment-controls {
+            margin-top: 5px;
+            display: none;
+        }
+
+        .segment-controls button {
+            margin: 2px;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: var(--input-bg);
+            color: var(--text-color);
+        }
+
+        input[type=text],
+        input[type=number] {
+            background: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 6px;
+        }
+
+        button {
+            padding: 8px 15px;
+            margin: 10px 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background: var(--accent);
+            color: #fff;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .tag {
+            background: var(--input-bg);
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-left: 4px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            display: inline-block;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .tag:hover {
+            background: var(--border-color);
+        }
+
+        #tagContainer {
+            width: 650px;
+        }
+
+        #anotacionesList {
+            width: 520px;
+        }
+
+        .page-controls {
+            margin-top: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-numbers span {
+            cursor: pointer;
+            margin: 0 4px;
+        }
+
+        .page-numbers .current {
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.4s, bottom 0.4s;
+        }
+
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 12px 0;
+            margin-bottom: 20px;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .back-button {
+            position: absolute;
+            left: 20px;
+            background: transparent;
+            color: var(--text-color);
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .back-button:hover {
+            transform: translateX(-3px);
+            opacity: 0.8;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
+            border: none;
+            font-size: 1.2rem;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .delete-btn:hover {
+            opacity: 0.7;
+        }
+    </style>
+
+    <style>
+        .bg-container {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -76,12 +294,10 @@
             background: #0078d7;
         }
 
-        /* azul */
         #markerEnd {
             background: #e63946;
         }
 
-        /* rojo */
         .selection-range {
             position: absolute;
             top: 0;
@@ -96,25 +312,7 @@
         }
 
         input+button {
-            /* margin-left: 2px;
-    margin-right: 6px; */
             cursor: pointer;
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #333;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 6px;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .toast.show {
-            opacity: 1;
         }
 
         .noselect {
@@ -131,11 +329,22 @@
             margin-bottom: 5px;
         }
     </style>
+
 </head>
 
 <body>
-    <div class="container">
-        <button id="openVideo">Abrir vídeo</button>
+    <div id="modalOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); z-index:1000;"></div>
+
+    <div id="videoModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#222; color:#fff; padding:20px; border-radius:10px; z-index:1001; max-width:600px; width:90%;">
+        <h3>Selecciona un vídeo <div id="video_path_name"></div></h3>
+        <ul id="videoList" style="list-style:none; padding:0; max-height:300px; overflow-y:auto;"></ul>
+        <button class="bg-blue-600 hover:bg-blue-700 mt-2 px-4 py-2 rounded-lg" onclick="seleccionarOtraRutaVideos()">📁 Seleccionar otra ruta</button>
+        <button class="bg-red-600 hover:bg-red-700 mt-2 px-4 py-2 rounded-lg" onclick="cerrarModal()" style="margin-left:10px;">❌ Cerrar</button>
+    </div>
+
+
+    <div class="bg-container">
+        <button class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg" onclick="abrirVideo()">🎥 Abrir vídeo</button>
         <video id="videoPlayer" controls></video>
 
         <!-- Timeline superior (scrub dentro del rango) -->
@@ -169,10 +378,20 @@
                 <button id="segmentDec" title="Mover segmento 1s atrás">⬅️</button>
                 <button id="segmentInc" title="Mover segmento 1s adelante">➡️</button>
             </div>
-            <button id="generateClip">Generar clip</button>
+
         </div>
     </div>
-    <div class="toast" id="toast"></div>
+
+    <div class="bg-container">
+        <button id="saveButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg" style="display:none;" onclick="generarClip()">💾 Generar Clip</button>
+    </div>
+
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
+
+
 
     <script>
         const video = document.getElementById("videoPlayer");
@@ -187,7 +406,6 @@
         const startInput = document.getElementById("start");
         const endInput = document.getElementById("end");
         const toast = document.getElementById("toast");
-        const generateClipBtn = document.getElementById("generateClip");
         const startDecBtn = document.getElementById("startDec");
         const startIncBtn = document.getElementById("startInc");
         const endDecBtn = document.getElementById("endDec");
@@ -204,28 +422,33 @@
         let clipQueue = [];
         let processingClip = false;
 
+        let shiftPressed = false;
+        let controlPressed = false;
+        document.addEventListener('keydown', e => {
+            if (e.key === "Shift" && !shiftPressed) { shiftPressed = true; }
+            if (e.key === "Control" && !controlPressed) { controlPressed = true; }
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key === "Shift") { shiftPressed = false; }
+            if (e.key === "Control") { controlPressed = false; }
+        });
+
+
+
         function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
         function formatTime(sec) {
             if (isNaN(sec)) return "00:00:00";
             const h = Math.floor(sec / 3600).toString().padStart(2, "0");
             const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
             const s = Math.floor(sec % 60).toString().padStart(2, "0");
-            return `${h}:${m}:${s}`;
+            const ms = Math.floor((sec % 1) * 100).toString().padStart(2, "0"); // centésimas
+            return `${h}:${m}:${s}.${ms}`;
         }
         function showToast(msg) {
             toast.textContent = msg;
             toast.classList.add("show");
             setTimeout(() => toast.classList.remove("show"), 2000);
         }
-
-        openBtn.onclick = async () => {
-            const res = await fetch("/abrir_video");
-            const data = await res.json();
-            if (data.video_url) {
-                video.src = data.video_url + "?t=" + new Date().getTime();
-                video.load();
-            }
-        };
 
         video.onloadedmetadata = () => {
             videoDuration = video.duration;
@@ -262,10 +485,23 @@
             endInput.dataset.sec = eSec;
         }
 
+        function restartMarkers() {
+            markerStartPct = 0
+            markerEndPct = 100
+            video.currentTime = 0;
+            updateMarkers()
+        }
+
         // ==== Botones de ajuste 1s ====
         startDecBtn.onclick = () => {
             let s = parseFloat(startInput.dataset.sec);
-            s = clamp(s - 1, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            s = clamp(s - timeToChange, 0, parseFloat(endInput.dataset.sec) - 0.1);
             startInput.dataset.sec = s;
             markerStartPct = (s / videoDuration) * 100;
             updateMarkers();
@@ -274,7 +510,13 @@
         };
         startIncBtn.onclick = () => {
             let s = parseFloat(startInput.dataset.sec);
-            s = clamp(s + 1, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            s = clamp(s + timeToChange, 0, parseFloat(endInput.dataset.sec) - 0.1);
             startInput.dataset.sec = s;
             markerStartPct = (s / videoDuration) * 100;
             updateMarkers();
@@ -283,7 +525,13 @@
         };
         endDecBtn.onclick = () => {
             let e = parseFloat(endInput.dataset.sec);
-            e = clamp(e - 1, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            e = clamp(e - timeToChange, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
             endInput.dataset.sec = e;
             markerEndPct = (e / videoDuration) * 100;
             updateMarkers();
@@ -293,7 +541,13 @@
         };
         endIncBtn.onclick = () => {
             let e = parseFloat(endInput.dataset.sec);
-            e = clamp(e + 1, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            e = clamp(e + timeToChange, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
             endInput.dataset.sec = e;
             markerEndPct = (e / videoDuration) * 100;
             updateMarkers();
@@ -390,8 +644,14 @@
             let s = parseFloat(startInput.dataset.sec);
             let e = parseFloat(endInput.dataset.sec);
             const duration = e - s;
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
             // Calcula nuevo inicio, sin salirse de 0
-            s = clamp(s - 1, 0, videoDuration - duration);
+            s = clamp(s - timeToChange, 0, videoDuration - duration);
             e = s + duration;
             markerStartPct = (s / videoDuration) * 100;
             markerEndPct = (e / videoDuration) * 100;
@@ -405,8 +665,14 @@
             let s = parseFloat(startInput.dataset.sec);
             let e = parseFloat(endInput.dataset.sec);
             const duration = e - s;
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
             // Calcula nuevo final, sin salirse de videoDuration
-            e = clamp(e + 1, duration, videoDuration);
+            e = clamp(e + timeToChange, duration, videoDuration);
             s = e - duration;
             markerStartPct = (s / videoDuration) * 100;
             markerEndPct = (e / videoDuration) * 100;
@@ -446,14 +712,113 @@
             video.play();
         });
 
-        // ==== Generar clips ====
-        generateClipBtn.onclick = async () => {
+
+    </script>
+
+    <script>
+        const endpoint = "";
+        async function abrirVideo() {
+            document.getElementById("modalOverlay").style.display = "block";
+            document.getElementById("videoModal").style.display = "block";
+            await cargarListadoVideos();
+        }
+
+        function cerrarModal() {
+            document.getElementById("modalOverlay").style.display = "none";
+            document.getElementById("videoModal").style.display = "none";
+        }
+
+        async function cargarListadoVideos() {
+            const res = await fetch(endpoint + "/listar_videos");
+            const data = await res.json();
+            const ul = document.getElementById("videoList");
+            ul.innerHTML = "";
+            document.getElementById("video_path_name").textContent = "("+data.videos_path+")"
+            for (let videoData of data.videos) {
+                let video = videoData.video
+                const count = videoData.clips || 0
+
+                const li = document.createElement("li");
+                li.style.display = "flex";
+                li.style.justifyContent = "space-between";
+                li.style.alignItems = "center";
+                li.style.padding = "8px 12px";
+                li.style.marginBottom = "4px";
+                li.style.borderRadius = "6px";
+                li.style.background = "#333";
+                li.style.cursor = "pointer";
+                li.style.transition = "background 0.2s, box-shadow 0.2s";
+                li.style.overflow = "hidden";
+
+                // Hover
+                li.addEventListener("mouseenter", () => {
+                    li.style.background = "#4CAF50";
+                    li.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+                });
+                li.addEventListener("mouseleave", () => {
+                    li.style.background = "#333";
+                    li.style.boxShadow = "none";
+                });
+
+                const nameSpan = document.createElement("span");
+                nameSpan.textContent = video;
+                nameSpan.style.flex = "1";
+                nameSpan.style.whiteSpace = "nowrap";
+                nameSpan.style.overflow = "hidden";
+                nameSpan.style.textOverflow = "ellipsis";
+                nameSpan.style.marginRight = "10px";
+
+                const countSpan = document.createElement("span");
+                countSpan.className = "count";
+                countSpan.textContent = count + " clips";
+                countSpan.style.flex = "0 0 auto";
+
+                li.appendChild(nameSpan);
+                li.appendChild(countSpan);
+
+                li.onclick = () => seleccionarVideoModal(video);
+                ul.appendChild(li);
+            }
+        }
+
+
+
+        let currentVideoName = null;
+
+        async function seleccionarVideoModal(nombreVideo) {
+            currentVideoName = nombreVideo; // Guardar nombre actual
+            cerrarModal();
+
+            const res = await fetch(endpoint + "/abrir_video?video=" + encodeURIComponent(nombreVideo));
+            const data = await res.json();
+            if (data.error) return showToast(data.error, "#c0392b");
+            video.src = data.video_url
+
+            showToast("Vídeo cargado correctamente", "#27ae60");
+            document.getElementById("saveButton").style.display = ""
+            restartMarkers();
+        }
+
+       
+
+        async function seleccionarOtraRutaVideos() {
+            const res = await fetch(endpoint + "/seleccionar_ruta_videos");
+            const data = await res.json();
+            if (data.success) {
+                await cargarListadoVideos();
+                showToast("Ruta seleccionada", "#27ae60");
+            }
+        }
+        
+        function generarClip(){
             const start = parseFloat(startInput.dataset.sec);
             const end = parseFloat(endInput.dataset.sec);
             clipQueue.push({ start, end });
             showToast("Clip añadido a la cola");
             if (!processingClip) processQueue();
-        };
+        }
+
+
         async function processQueue() {
             if (clipQueue.length === 0) return;
             processingClip = true;
@@ -476,6 +841,24 @@
             if (clipQueue.length > 0) processQueue();
             else processingClip = false;
         }
+    </script>
+
+
+
+    <script>
+        // Obtener tema guardado o usar "dark" por defecto
+        let theme = localStorage.getItem("theme") || "dark";
+
+        // Aplicar tema inicial
+        document.body.classList.toggle("light", theme === "light");
+
+        // Función para cambiar tema
+        function toggleTheme() {
+            theme = theme === "dark" ? "light" : "dark";  // Alternar valor
+            localStorage.setItem("theme", theme);
+            document.body.classList.toggle("light", theme === "light");
+        }
+
     </script>
 
 </body>
