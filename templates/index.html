@@ -717,6 +717,7 @@
 
     <script>
         const endpoint = "";
+        let currentVideoName = null;
         async function abrirVideo() {
             document.getElementById("modalOverlay").style.display = "block";
             document.getElementById("videoModal").style.display = "block";
@@ -745,7 +746,11 @@
                 li.style.padding = "8px 12px";
                 li.style.marginBottom = "4px";
                 li.style.borderRadius = "6px";
-                li.style.background = "#333";
+                if (currentVideoName == video) {
+                    li.style.background = "#4b79ff";
+                }else{
+                    li.style.background = "#333";
+                }
                 li.style.cursor = "pointer";
                 li.style.transition = "background 0.2s, box-shadow 0.2s";
                 li.style.overflow = "hidden";
@@ -756,7 +761,11 @@
                     li.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
                 });
                 li.addEventListener("mouseleave", () => {
-                    li.style.background = "#333";
+                    if (currentVideoName == video) {
+                        li.style.background = "#4b79ff";
+                    }else{
+                        li.style.background = "#333";
+                    }
                     li.style.boxShadow = "none";
                 });
 
@@ -783,7 +792,6 @@
 
 
 
-        let currentVideoName = null;
 
         async function seleccionarVideoModal(nombreVideo) {
             currentVideoName = nombreVideo; // Guardar nombre actual
