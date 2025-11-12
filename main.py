@@ -134,6 +134,11 @@ def generate_clip():
             "-ss", str(start),
             "-to", str(end),
             "-i", videoPath,                     # input después de -i para precisión
+            "-map", "0", # Copia todas las pistas de vídeo y audio
+            "-c", "copy", # Copia sin recodificar ni cambiar la calidad
+            "-avoid_negative_ts", "1", # corrige timestamps negativos
+            "-fflags", "+genpts", # recalcula los PTS (Presentation Timestamps) del vídeo
+            "-reset_timestamps", "1", # fuerza que todos los streams comiencen en 0
             "-y",
             clip_path
         ]
