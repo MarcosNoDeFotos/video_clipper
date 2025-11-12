@@ -1,6 +1,7 @@
 {
     "file_name": "serverConfig.json (Nombre del archivo para ser reconocido)",
     "clips_output": "C:/videos",
+    "default_videos_input": "C:/videosEditar",
     "host": "127.0.0.1",
     "port": 5000
 }

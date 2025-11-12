@@ -8,8 +8,7 @@ import subprocess
 
 app = Flask(__name__)
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
-app.config['VIDEOS_DIR'] = CURRENT_PATH + "videos_entrada"
-os.makedirs(app.config['VIDEOS_DIR'], exist_ok=True)
+
 
 videoPath = None  # ruta local del vídeo
 
@@ -163,6 +162,7 @@ if __name__ == "__main__":
     # app.run(debug=True, use_reloader=False, host="192.168.1.189")
 
     app.config['CLIPS_FOLDER'] = 'static/clips'
+    app.config['VIDEOS_DIR'] = CURRENT_PATH + "videos_entrada"
     host= "127.0.0.1"
     port = 5000
     serverConfigPath =CURRENT_PATH+"serverConfig.json"
@@ -172,8 +172,10 @@ if __name__ == "__main__":
             host = serverConfigData["host"]
             port = serverConfigData["port"]
             app.config['CLIPS_FOLDER'] = serverConfigData["clips_output"]
+            app.config['VIDEOS_DIR'] = serverConfigData["default_videos_input"]
     except Exception as e:
         print(f"Error al abrir el archivo de configuración del servidor en {serverConfigPath}. \n{e}")
-        
+
     os.makedirs(app.config['CLIPS_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['VIDEOS_DIR'], exist_ok=True)
     app.run(debug=True, use_reloader=False, host=host, port=port)
